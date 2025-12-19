@@ -1,0 +1,39 @@
+{
+  "project_name": "Projet_Auto_GNS3",
+  "global_options": {
+    "inter_as_subnet": "2001:FFFF",
+    "mgmt_loopback_prefix": "2001:BAD:CAFE"
+  },
+  "as_list": [
+    {
+      "asn": "100",
+      "prefix": "2001:100",
+      "protocol": "rip",
+      "rip_process_name": "PROC_RIP",
+      "routers": ["R1", "R2", "R3"]
+    },
+    {
+      "asn": "200",
+      "prefix": "2001:200",
+      "protocol": "ospf",
+      "ospf_process_id": "1",
+      "routers": ["R4", "R5", "R6"]
+    }
+  ],
+  "bgp_policies": {
+    "customer_community": "10:100",
+    "local_pref_customer": 200,
+    "local_pref_peer": 100,
+    "local_pref_provider": 50
+  },
+  "external_relationships": [
+    {
+      "nodes": ["R3", "R4"],
+      "relationship": "peer"
+    },
+    {
+      "nodes": ["R2", "R4"],
+      "relationship": "customer"
+    }
+  ]
+}
