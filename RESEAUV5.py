@@ -145,35 +145,43 @@ for link in gns3_data['topology']['links']:# parcour chaque cable phyqique
 
 
 print("3. Configuration BGP Avancée (Policies)...")
-for r in liste_routeurs:
-    data = get_router_intent(r)
+for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier GNS3
+    data = get_router_intent(r) #rentre dans le JSON pour trouver règles décidées pour R2
+    #AS, protocole, voisins ...
     if not data: continue
     
-    asn = data['asn']
+    asn = data['asn'] # numéro AS
     rid = get_id(r)
-    bgp_rid = f"{rid}.{rid}.{rid}.{rid}"
+    bgp_rid = f"{rid}.{rid}.{rid}.{rid}" # BGP router-ID, 22.22.22.22 par exemple
     
     configs[r] += f"! --- BGP --- \n"
-    configs[r] += f"router bgp {asn}\n"
-    configs[r] += f" bgp router-id {bgp_rid}\n"
-    configs[r] += f" no bgp default ipv4-unicast\n"
-    
+    configs[r] += f"router bgp {asn}\n" # Démarre le processus BGP avec le numéro d'AS défini dans intent.json (ex: 112).
+    configs[r] += f" bgp router-id {bgp_rid}\n" # Force l'identité du routeur pour éviter l'erreur si aucune IPv4 n'est présente.
+    configs[r] += f" no bgp default ipv4-unicast\n" # Désactive le mode par défaut IPv4 (car on fait un labo 100% IPv6).
+
+    # Initialise une variable vide pour stocker les commandes 'activate' et 'route-map' qu'on injectera plus tard.
     neighbors_config = ""
     
     # 3.1 iBGP
+    # Parcourt la liste des routeurs appartenant au MEME AS (définis dans intent.json).
     for neighbor in data['routers']:
+        # Évite de se configurer soi-même comme voisin.
         if neighbor == r: continue
+            
         n_rid = get_id(neighbor)
-        n_ip = f"{data['prefix']}::{n_rid}"
+        n_ip = f"{data['prefix']}::{n_rid}" # Calcule l'adresse IP Loopback du voisin (Cible stable pour l'iBGP).
         
-        configs[r] += f" neighbor {n_ip} remote-as {asn}\n"
-        configs[r] += f" neighbor {n_ip} update-source Loopback0\n"
-        neighbors_config += f"  neighbor {n_ip} activate\n"
-        neighbors_config += f"  neighbor {n_ip} next-hop-self\n"
-        neighbors_config += f"  neighbor {n_ip} send-community\n"
+        configs[r] += f" neighbor {n_ip} remote-as {asn}\n" # Déclare le voisin. Comme l'AS est le même -> C'est une session iBGP.
+        configs[r] += f" neighbor {n_ip} update-source Loopback0\n" #On force l'utilisation de notre Loopback comme source, sinon le voisin rejette la connexion.
+        neighbors_config += f"  neighbor {n_ip} activate\n" # Prépare l'activation du voisin dans la famille IPv6
+        neighbors_config += f"  neighbor {n_ip} next-hop-self\n" #Dit aux routeurs internes de passer par MOI pour sortir
+        neighbors_config += f"  neighbor {n_ip} send-community\n" # Active l'envoi des tags (communities) pour propager les infos clients/fournisseurs en interne
 
     # 3.2 eBGP
+    # Parcourt tous les câbles physiques du schéma GNS3 pour trouver les voisins directs
     for link in gns3_data['topology']['links']:
+        # Récupération des IDs et noms des deux extrémités du câble
+        # Identification de qui est "me" (moi) et "neighbor_name" (l'autre)
         node_a_id = link['nodes'][0]['node_id']
         node_b_id = link['nodes'][1]['node_id']
         name_a, name_b = nodes_map[node_a_id], nodes_map[node_b_id]
@@ -182,29 +190,44 @@ for r in liste_routeurs:
         if name_a == r: me, neighbor_name = name_a, name_b
         elif name_b == r: me, neighbor_name = name_b, name_a
         else: continue
-        
+            
+        # Récupère les infos de l'AS du voisin dans le fichier intent.json.
         neighbor_data = get_router_intent(neighbor_name)
-        
+
+        # Vérifie si le voisin est dans un AS DIFFÉRENT
         if neighbor_data and neighbor_data['asn'] != asn:
+            # Récupère le sous-réseau global pour les liens inter-AS
             subnet = f"{intent['global_options']['inter_as_subnet']}::"
+            # Logique déterministe : Le plus petit ID prend .1, le plus grand prend .2.
             n_rid = get_id(neighbor_name)
             suffix = "1" if n_rid < rid else "2"
+            # Construit l'adresse IP physique de l'interface du voisin.
             n_ip = f"{subnet}{suffix}"
-            
+
+            # Récupère le type de relation (Peer, Provider, Customer) depuis intent.json
             relationship = get_link_relationship(me, neighbor_name)
-            
+
+            # Déclare le voisin avec son AS différent -> Session eBGP
             configs[r] += f" neighbor {n_ip} remote-as {neighbor_data['asn']}\n"
-            
+
+            # Génère dynamiquement les noms des Route-Maps (ex: RM-PEER-IN)
             rm_in = f"RM-{relationship.upper()}-IN"
             rm_out = f"RM-{relationship.upper()}-OUT"
             
+            # Prépare l'activation IPv6
             neighbors_config += f"  neighbor {n_ip} activate\n"
+            # Active l'échange de communautés standards
             neighbors_config += f"  neighbor {n_ip} send-community\n"
+            # Applique le filtrage en ENTRÉE du routeur
             neighbors_config += f"  neighbor {n_ip} route-map {rm_in} in\n"
+            # Applique le filtrage en SORTIE du routeur
             neighbors_config += f"  neighbor {n_ip} route-map {rm_out} out\n"
 
+    # Entre dans le mode de configuration spécifique IPv6 de BGP
     configs[r] += " address-family ipv6 unicast\n"
+    # Annonce notre propre préfixe d'AS au monde extérieur
     configs[r] += f"  network {data['prefix']}::/32\n"
+    # Injecte tout le bloc de configuration des voisins (activations + route-maps) préparé ci-dessus
     configs[r] += neighbors_config
     configs[r] += " exit-address-family\n"
     configs[r] += " exit\n"
@@ -252,4 +275,5 @@ for name, content in configs.items():
         f.write(content)
 
     print(f"Généré : {name}.cfg")
+
 
