@@ -1,21 +1,25 @@
 import json
 import os
-import re
+import re #pour les expressions régulières
 
 # --- 1. CONFIGURATION ---
-DOSSIER_PROJET = r"C:\Users\Lucas\GNS3\projects\untitled2"
-FICHIER_GNS3 = os.path.join(DOSSIER_PROJET, "untitled2.gns3")
+DOSSIER_PROJET = r"C:\Users\Lucas\GNS3\projects\untitled4" #Chemin vers le dossier du projet GNS3 (à modifier selon config)
+FICHIER_GNS3 = os.path.join(DOSSIER_PROJET, "untitled4.gns3")
 FICHIER_INTENT = os.path.join(DOSSIER_PROJET, "intent.json")
 DOSSIER_SORTIE = os.path.join(DOSSIER_PROJET, "configs_finales")
 
 # --- 2. FONCTIONS UTILITAIRES ---
-def get_id(nom_routeur):
-    match = re.search(r'\d+', nom_routeur)
-    return int(match.group()) if match else 0
+def get_id(nom_routeur): #extrait l'ID numérique du routeur à partir de son nom ("R12" -> 12)
+    match = re.search(r'\d+', nom_routeur) #re.search cherche une séquence de chiffres dans le nom du routeur
+    return int(match.group()) if match else 0  #match.group() retourne la séquence trouvée
 
     
 def format_interface(adapter, port):
-        return f"GigabitEthernet{adapter}/{port}"
+        if adapter == 0:
+            return f"GigabitEthernet{adapter}/{port}"
+        else:    
+            return f"FastEthernet{adapter}/{port}"
+#s'adapte selon les noms des liens des routeurs disponibles (à modifier selon config sur GNS3)
     
 
 
@@ -32,30 +36,31 @@ with open(FICHIER_INTENT, 'r') as f:
     intent = json.load(f)
 
 nodes_map = {node['node_id']: node['name'] for node in gns3_data['topology']['nodes']}
-liste_routeurs = sorted(list(nodes_map.values()), key=get_id)
+print(nodes_map)
+#structure du dictionnaire {node_id: node_name}
+liste_routeurs = sorted(list(nodes_map.values()), key=get_id) #Liste des noms de routeurs triés par ID
+#print(liste_routeurs)
 
-configs = {r: f"! Config {r}\nipv6 unicast-routing\n" for r in liste_routeurs}
+configs = {r: f"! Config {r}\nipv6 unicast-routing\n" for r in liste_routeurs} 
+#obligatoire pour activer le routage ipv6
 
-# --- 4. LOGIQUE METIER ---
-def get_router_intent(router_name):
-    for as_data in intent['as_list']:
-        if router_name in as_data['routers']:
+
+def get_router_intent(router_name): #Retourne les données intent pour un routeur donné sous forme de dictionnaire
+    #print(intent['as_list']) #test
+    for as_data in intent['as_list']: #intent['as_list'] = liste des AS
+        if router_name in as_data['routers']: #pour chaque routeur dans la liste des routeurs de l'AS, si on trouve le routeur demandé, on retourne les données de l'AS
             return as_data
+            #as_data sous la forme : {'asn': , 'prefix': , 'protocol': 'ospf, 'ospf_process_id': 1, 'routers': []}
+            
     return None
 
-def get_link_relationship(r1, r2):
-    for rel in intent.get('external_relationships', []):
+def get_link_relationship(r1, r2): #définit les relations entre deux routeurs
+    print(intent.get('external_relationships', [])) #test
+    for rel in intent.get('external_relationships', []): #rel sous la forme {'nodes': [r1, r2], 'relationship': 'customer/provider/peer'}
         if r1 in rel['nodes'] and r2 in rel['nodes']:
-            return rel['relationship']
+            return rel['relationship'] #customer, provider, peer, selon intent.json
     return "peer"
-
-# --- 5. GENERATION CONFIGURATION ---
-
-print("1. Configuration des IPs et Loopbacks...")
-for r in liste_routeurs:
-    data = get_router_intent(r)
-    if not data: continue
-    rid = get_id(r)
+#les liens non spécifiés sont considérés comme des peers par défaut
     
     # Loopback
     configs[r] += f"interface Loopback0\n"
@@ -245,4 +250,5 @@ for name, content in configs.items():
     path = os.path.join(DOSSIER_SORTIE, f"{name}.cfg")
     with open(path, 'w') as f:
         f.write(content)
+
     print(f"Généré : {name}.cfg")
