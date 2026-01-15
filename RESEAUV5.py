@@ -234,48 +234,43 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
 
     # --- CORRECTION INDENTATION SECTION 3.3 ---
     # 3.3 DEFINITION DES ROUTE-MAPS (Policies)
-    pols = intent['bgp_policies']
+    pols = intent['bgp_policies']#on cherche les policies dans le fichier intent
     comm_cust = pols['customer_community']
     
     configs[r] += "! --- POLICIES ---\n"
-    configs[r] += f"ip community-list 1 permit {comm_cust}\n"
+    configs[r] += f"ip community-list 1 permit {comm_cust}\n"#on definit la liste community et on l'ajoute plus tard
     
     # CUSTOMER
-    configs[r] += f"route-map RM-CUSTOMER-IN permit 10\n"
-    configs[r] += f" set local-preference {pols['local_pref_customer']}\n"
-    configs[r] += f" set community {comm_cust} additive\n exit\n"
-    configs[r] += f"route-map RM-CUSTOMER-OUT permit 10\n exit\n"
+    configs[r] += f"route-map RM-CUSTOMER-IN permit 10\n" #création de la route map d'entrée
+    configs[r] += f" set local-preference {pols['local_pref_customer']}\n"#local pref élevé puisque c'est le client
+    configs[r] += f" set community {comm_cust} additive\n exit\n"#on ajoute la community list crée avant pour tag les clients
+    configs[r] += f"route-map RM-CUSTOMER-OUT permit 10\n exit\n"#on l'a mise pour une eventuelle modif plus tard mais pas utile pour l'instant
     
     # PROVIDER
-    configs[r] += f"route-map RM-PROVIDER-IN permit 10\n"
-    configs[r] += f" set local-preference {pols['local_pref_provider']}\n exit\n"
-    configs[r] += f"route-map RM-PROVIDER-OUT permit 10\n"
-    configs[r] += f" match community 1\n exit\n"
+    configs[r] += f"route-map RM-PROVIDER-IN permit 10\n"#route map d'entree
+    configs[r] += f" set local-preference {pols['local_pref_provider']}\n exit\n"#local pref faible
+    configs[r] += f"route-map RM-PROVIDER-OUT permit 10\n"#route map de sortie
+    configs[r] += f" match community 1\n exit\n"#en sortie on ne permet que les route allant vers nos client
     
     # PEER
-    configs[r] += f"route-map RM-PEER-IN permit 10\n"
-    configs[r] += f" set local-preference {pols['local_pref_peer']}\n exit\n"
-    configs[r] += f"route-map RM-PEER-OUT permit 10\n"
-    configs[r] += f" match community 1\n exit\n"
+    configs[r] += f"route-map RM-PEER-IN permit 10\n"#route map entree
+    configs[r] += f" set local-preference {pols['local_pref_peer']}\n exit\n"#local pref mid 
+    configs[r] += f"route-map RM-PEER-OUT permit 10\n"#sortie
+    configs[r] += f" match community 1\n exit\n"#pareil que les providers
 
 
 # --- 6. SAUVEGARDE ---
-if not os.path.exists(DOSSIER_SORTIE):
+if not os.path.exists(DOSSIER_SORTIE):#si le fichier n'existe pas on le creer
     os.makedirs(DOSSIER_SORTIE)
 
 for name, content in configs.items():
-    # --- CORRECTION CRITIQUE ---
     # On ajoute 'end' pour dire au routeur que le fichier est fini
-    # On ajoute 'write memory' pour sauvegarder dès le premier boot (optionnel mais pratique)
+    # On ajoute 'write memory' pour ne pas tout perdre
     content += "end\n"
     content += "write memory\n"
     
-    path = os.path.join(DOSSIER_SORTIE, f"{name}.cfg")
-    with open(path, 'w') as f:
-        f.write(content)
+    path = os.path.join(DOSSIER_SORTIE, f"{name}.cfg")#on donne l'adresse exacte
+    with open(path, 'w') as f:#on regarde si le fichier pour chaque routeur existe sinon on le creer
+        f.write(content)#on ecrit toute la config
 
-    print(f"Généré : {name}.cfg")
-
-
-
-
+    print(f"Généré : {name}.cfg")#...
