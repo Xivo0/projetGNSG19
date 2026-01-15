@@ -225,7 +225,7 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
 
     # Entre dans le mode de configuration spécifique IPv6 de BGP
     configs[r] += " address-family ipv6 unicast\n"
-    # Annonce notre propre préfixe d'AS au monde extérieur
+    #Injecte le préfixe de l'AS dans BGP pour l'annoncer au monde extérieur (Internet), rendant ainsi l'AS joignable
     configs[r] += f"  network {data['prefix']}::/32\n"
     # Injecte tout le bloc de configuration des voisins (activations + route-maps) préparé ci-dessus
     configs[r] += neighbors_config
@@ -275,5 +275,6 @@ for name, content in configs.items():
         f.write(content)
 
     print(f"Généré : {name}.cfg")
+
 
 
