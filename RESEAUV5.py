@@ -105,8 +105,11 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     int_a = format_interface(node_a['adapter_number'], node_a['port_number'])#dans GNS3 "adapter_number": 0,"port_number": 1 -> GigabitEthernet0/1
     int_b = format_interface(node_b['adapter_number'], node_b['port_number'])
     
-    suff_a = "1" if rid_a < rid_b else "2"# exemple R2 ↔ R5 2<5 R2::1 et R5::2
+    """suff_a = "1" if rid_a < rid_b else "2"# exemple R2 ↔ R5 2<5 R2::1 et R5::2
     suff_b = "2" if rid_a < rid_b else "1"
+    """
+    suff_a = f"{rid_a}" #mieux car on prends l'id en suffixe
+    suff_b = f"{rid_b}"
     
     # --- CORRECTION NO SHUTDOWN ---
     configs[name_a] += f"interface {int_a}\n ipv6 address {subnet}{suff_a}/64\n no shutdown\n exit\n"
@@ -216,8 +219,11 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
             mnemo = f"{min(rid, n_rid)}:{max(rid, n_rid)}"
             subnet = f"{intent['global_options']['inter_as_subnet']}:{mnemo}::"
             
-            # Logique déterministe : Le plus petit ID prend .1, le plus grand prend .2.
+            """# Logique déterministe : Le plus petit ID prend .1, le plus grand prend .2.
             suffix = "1" if n_rid < rid else "2"
+            """
+            suffix = f"{n_rid}" #idem, on prend l'id en suffixe plutôt
+            
             # Construit l'adresse IP physique de l'interface du voisin.
             n_ip = f"{subnet}{suffix}"
 
@@ -291,4 +297,3 @@ for name, content in configs.items():
         f.write(content)#on ecrit toute la config
 
     print(f"Généré : {name}.cfg")#...
-
