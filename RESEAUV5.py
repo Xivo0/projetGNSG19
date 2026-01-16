@@ -62,10 +62,21 @@ def get_link_relationship(r1, r2): #définit les relations entre deux routeurs
     return "peer"
 #les liens non spécifiés sont considérés comme des peers par défaut
     
-      # Loopback
-    configs[r] += f"interface Loopback0\n"#Entre en configuration de l’interface loopback sur le routeur Cisco.
-    configs[r] += f" ipv6 address {data['prefix']}::{rid}/128\n"# met l'addresse unique du routeur 
-    configs[r] += " ipv6 enable\n exit\n"# exit pour sortir de cette comfig 
+
+print("1. Configuration des IPs et Loopbacks...")
+for r in liste_routeurs:
+    data = get_router_intent(r)
+    if not data: continue
+    rid = get_id(r) 
+    
+    # Loopback
+    configs[r] += f"interface Loopback0\n"
+    configs[r] += f" ipv6 address {data['prefix']}::{rid}/128\n"
+    configs[r] += " ipv6 enable\n exit\n"
+
+    # --- AJOUT OBLIGATOIRE POUR BGP ---
+    # Crée la route statique pour que la commande 'network' fonctionne
+    configs[r] += f"ipv6 route {data['prefix']}::/32 Null0\n"
 
 # Liens Physiques (Lecture GNS3)
 for link in gns3_data['topology']['links']:#lis automatiquement la topologie réel du reseau (boucle sur chaque lien entre 2 routeurs pour donner un nom à ces routeurs)
