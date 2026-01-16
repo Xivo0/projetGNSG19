@@ -261,7 +261,7 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     comm_cust = pols['customer_community']
     
     configs[r] += "! --- POLICIES ---\n"
-    configs[r] += ip bgp community new-format
+    configs[r] += "ip bgp community new-format"
     configs[r] += f"ip community-list 1 permit {comm_cust}\n"#on definit la liste community et on l'ajoute plus tard
     
     # CUSTOMER
@@ -298,4 +298,5 @@ for name, content in configs.items():
         f.write(content)#on ecrit toute la config
 
     print(f"Généré : {name}.cfg")#...
+
 
