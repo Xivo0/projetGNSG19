@@ -94,7 +94,7 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     
     # Subnet
     if data_a['asn'] == data_b['asn']:#Ce lien est-il interne à un AS ou entre deux AS différents ?
-        mnemo = f"{min(rid_a, rid_b)}{max(rid_a, rid_b)}" # traduit le lien entre 2 routeurs: R3 ↔ R7 min:3 max:7 -> mnemo = 37
+        mnemo = f"{min(rid_a, rid_b)}:{max(rid_a, rid_b)}" # traduit le lien entre 2 routeurs: R3 ↔ R7 min:3 max:7 -> mnemo = 37
         subnet = f"{data_a['prefix']}:{mnemo}::"# generation du prefix 
     else:
         #correction duplicata d'ip
@@ -291,3 +291,4 @@ for name, content in configs.items():
         f.write(content)#on ecrit toute la config
 
     print(f"Généré : {name}.cfg")#...
+
