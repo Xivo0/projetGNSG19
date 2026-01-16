@@ -23,3 +23,7 @@ pour les local pref :
 100 -> peer
 50 -> provider
 (comme en TP)
+
+
+
+Ce que fait le code avec les BGP Policies pour l'instant : créée des community-lists pours les customers avec un permit 10:100, met des local prefs dans les route-maps fait matcher les communities dans les route-maps des providers et peers pour ne leur annoncer que les clients.
