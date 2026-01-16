@@ -19,7 +19,7 @@ pour les communities :
 10:100 -> 10 pour le customer, 100 pour le numéro d'AS (20 pour un peer, 30 pour un provider, mais on a pas implémenté parce que on envoit que nos routes aux clients)
 
 pour les local pref :
-200 -> provider
+200 -> customer
 100 -> peer
-50 -> customer
+50 -> provider
 (comme en TP)
