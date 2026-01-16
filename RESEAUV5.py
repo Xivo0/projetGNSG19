@@ -22,7 +22,6 @@ def format_interface(adapter, port):
 #s'adapte selon les noms des liens des routeurs disponibles (à modifier selon config sur GNS3)
     
 
-
   
 
 # --- 3. CHARGEMENT DES DONNEES ---
@@ -98,7 +97,10 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
         mnemo = f"{min(rid_a, rid_b)}{max(rid_a, rid_b)}" # traduit le lien entre 2 routeurs: R3 ↔ R7 min:3 max:7 -> mnemo = 37
         subnet = f"{data_a['prefix']}:{mnemo}::"# generation du prefix 
     else:
-        subnet = f"{intent['global_options']['inter_as_subnet']}::"#lien intra-AS
+        #correction duplicata d'ip
+        # On utilise les IDs pour rendre le lien unique aussi en Inter-AS 
+        mnemo = f"{min(rid_a, rid_b)}:{max(rid_a, rid_b)}"
+        subnet = f"{intent['global_options']['inter_as_subnet']}:{mnemo}::"#lien intra-AS unique
 
     int_a = format_interface(node_a['adapter_number'], node_a['port_number'])#dans GNS3 "adapter_number": 0,"port_number": 1 -> GigabitEthernet0/1
     int_b = format_interface(node_b['adapter_number'], node_b['port_number'])
@@ -207,10 +209,14 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
 
         # Vérifie si le voisin est dans un AS DIFFÉRENT
         if neighbor_data and neighbor_data['asn'] != asn:
+            # --- CORRECTION DUPLICATA BGP ---
             # Récupère le sous-réseau global pour les liens inter-AS
-            subnet = f"{intent['global_options']['inter_as_subnet']}::"
-            # Logique déterministe : Le plus petit ID prend .1, le plus grand prend .2.
+            # On réutilise la meme logique que pour l'adressage IP pour eviter les duplicatas
             n_rid = get_id(neighbor_name)
+            mnemo = f"{min(rid, n_rid)}:{max(rid, n_rid)}"
+            subnet = f"{intent['global_options']['inter_as_subnet']}:{mnemo}::"
+            
+            # Logique déterministe : Le plus petit ID prend .1, le plus grand prend .2.
             suffix = "1" if n_rid < rid else "2"
             # Construit l'adresse IP physique de l'interface du voisin.
             n_ip = f"{subnet}{suffix}"
