@@ -269,6 +269,7 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     comm_cust = pols['customer_community']
     
     configs[r] += "! --- POLICIES ---\n"
+    configs[r] += "ip bgp community new-format"
     configs[r] += f"ip community-list 1 permit {comm_cust}\n"#on definit la liste community et on l'ajoute plus tard
     
     #DEFINITION D'UNE ACL POUR ANNONCER SON PREFIXE AUSSI
@@ -382,6 +383,7 @@ end
 
         else:
             print(f"Dossier introuvable pour {name} (UUID: {uuid})")
+
 
 
 
