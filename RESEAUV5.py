@@ -8,6 +8,7 @@ FICHIER_GNS3 = os.path.join(DOSSIER_PROJET, "untitled4.gns3")
 FICHIER_INTENT = os.path.join(DOSSIER_PROJET, "intent.json")
 DOSSIER_SORTIE = os.path.join(DOSSIER_PROJET, "configs_finales")
 
+
 # --- 2. FONCTIONS UTILITAIRES ---
 def get_id(nom_routeur): #extrait l'ID numérique du routeur à partir de son nom ("R12" -> 12)
     match = re.search(r'\d+', nom_routeur) #re.search cherche une séquence de chiffres dans le nom du routeur
@@ -40,8 +41,9 @@ print(nodes_map)
 liste_routeurs = sorted(list(nodes_map.values()), key=get_id) #Liste des noms de routeurs triés par ID
 #print(liste_routeurs)
 
+#MODIF EEM
 configs = {r: f"! Config {r}\nipv6 unicast-routing\n" for r in liste_routeurs} 
-#obligatoire pour activer le routage ipv6
+interfaces_actives = {r: [] for r in liste_routeurs} # Dictionnaire pour stocker les interfaces à allumer, obligatoire pour activer le routage ipv6, contiendra les interfaces GigabitEthernet0/1 etc..
 
 
 def get_router_intent(router_name): #Retourne les données intent pour un routeur donné sous forme de dictionnaire
@@ -54,7 +56,7 @@ def get_router_intent(router_name): #Retourne les données intent pour un routeu
     return None
 
 def get_link_relationship(r1, r2): #définit les relations entre deux routeurs
-    print(intent.get('external_relationships', [])) #test
+    # print(intent.get('external_relationships', [])) #test
     for rel in intent.get('external_relationships', []): #rel sous la forme {'nodes': [r1, r2], 'relationship': 'customer/provider/peer'}
         if r1 in rel['nodes'] and r2 in rel['nodes']:
             return rel['relationship'] #customer, provider, peer, selon intent.json
@@ -111,9 +113,15 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     suff_a = f"{rid_a}" #mieux car on prends l'id en suffixe
     suff_b = f"{rid_b}"
     
-    # --- CORRECTION NO SHUTDOWN ---
-    configs[name_a] += f"interface {int_a}\n ipv6 address {subnet}{suff_a}/64\n no shutdown\n exit\n"
-    configs[name_b] += f"interface {int_b}\n ipv6 address {subnet}{suff_b}/64\n no shutdown\n exit\n"
+   #tentative de correction avec les no shutdown
+    configs[name_a] += f"interface {int_a}\n no shutdown\n ipv6 address {subnet}{suff_a}/64\n no shutdown\n exit\n"
+    configs[name_b] += f"interface {int_b}\n no shutdown\n ipv6 address {subnet}{suff_b}/64\n no shutdown\n exit\n"
+
+    #EEM
+    interfaces_actives[name_a].append(int_a) #ajout des interfaces dans le dico
+    interfaces_actives[name_b].append(int_b)
+    #print(interfaces_actives)
+
 
 print("2. Configuration IGP (RIP/OSPF)...")
 # Configuration Globale des protocoles
@@ -261,9 +269,12 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     comm_cust = pols['customer_community']
     
     configs[r] += "! --- POLICIES ---\n"
-    configs[r] += "ip bgp community new-format"
     configs[r] += f"ip community-list 1 permit {comm_cust}\n"#on definit la liste community et on l'ajoute plus tard
     
+    #DEFINITION D'UNE ACL POUR ANNONCER SON PREFIXE AUSSI
+    configs[r] += f"ipv6 access-list ACL-MY-AS\n"
+    configs[r] += f" permit {data['prefix']}::/32 any\n exit\n" # On autorise l'annonce de son propre préfixe vers l'extérieur
+
     # CUSTOMER
     configs[r] += f"route-map RM-CUSTOMER-IN permit 10\n" #création de la route map d'entrée
     configs[r] += f" set local-preference {pols['local_pref_customer']}\n"#local pref élevé puisque c'est le client
@@ -275,28 +286,104 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     configs[r] += f" set local-preference {pols['local_pref_provider']}\n exit\n"#local pref faible
     configs[r] += f"route-map RM-PROVIDER-OUT permit 10\n"#route map de sortie
     configs[r] += f" match community 1\n exit\n"#en sortie on ne permet que les route allant vers nos client
+    # AJOUT : Règle 20 pour laisser sortir notre propre réseau défini dans l'ACL
+    configs[r] += f"route-map RM-PROVIDER-OUT permit 20\n"
+    configs[r] += f" match ipv6 address ACL-MY-AS\n exit\n"
     
     # PEER
     configs[r] += f"route-map RM-PEER-IN permit 10\n"#route map entree
     configs[r] += f" set local-preference {pols['local_pref_peer']}\n exit\n"#local pref mid 
     configs[r] += f"route-map RM-PEER-OUT permit 10\n"#sortie
     configs[r] += f" match community 1\n exit\n"#pareil que les providers
+    configs[r] += f"route-map RM-PEER-OUT permit 20\n"
+    configs[r] += f" match ipv6 address ACL-MY-AS\n exit\n"
+
+#EEM
+print("génération EEM pour les interfaces actives de tous les routeurs")
+for r in liste_routeurs:
+    if interfaces_actives[r]:
+        # On crée une chaîne propre : "GigabitEthernet0/0, FastEthernet1/0"
+        liste_int = ", ".join(interfaces_actives[r])#on rajoute les interfaces à activer séparées par des virgules + espaces
+        # Le script EEM qui se déclenchera 20 secondes après le boot
+        configs[r] += f"""
+!
+event manager applet GNS3_AUTO_NOSHUT
+ event timer countdown time 10
+ action 1.0 cli command "enable"
+ action 2.0 cli command "configure terminal"
+ action 3.0 cli command "interface range {liste_int}" 
+ action 4.0 cli command "no shutdown"
+ action 5.0 cli command "end"
+!
+"""
+#On active toutes les interfaces listées dans le dico interfaces_actives pour chaque routeur, 20 secondes après le boot du routeur (temps à changer selon le pc), on ajoute à la fin de config
 
 
-# --- 6. SAUVEGARDE ---
-if not os.path.exists(DOSSIER_SORTIE):#si le fichier n'existe pas on le creer
-    os.makedirs(DOSSIER_SORTIE)
+#NOUVEAU SAUVEGARDE
+print("\nINJECTION DES CONFIGURATIONS")
+print(f"Dossier PROJET: {DOSSIER_PROJET}")
 
-for name, content in configs.items():
-    # On ajoute 'end' pour dire au routeur que le fichier est fini
-    # On ajoute 'write memory' pour ne pas tout perdre
-    content += "end\n"
-    content += "write memory\n"
+for node in gns3_data['topology']['nodes']:
+    name = node['name']
+    uuid = node['node_id'] #UUID unique du routeur dans GNS3 pour avoir le nom des répertoires contenant les configs
     
-    path = os.path.join(DOSSIER_SORTIE, f"{name}.cfg")#on donne l'adresse exacte
-    with open(path, 'w') as f:#on regarde si le fichier pour chaque routeur existe sinon on le creer
-        f.write(content)#on ecrit toute la config
+    if name in configs:
+        # Configuration propre Cisco
+        final_content = f"""!
+version 15.2
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+hostname {name}
+!
+boot-start-marker
+boot-end-marker
+!
+ipv6 unicast-routing
+!
+{configs[name]}
+!
+end
+"""
+#Version 15.2 pour "tromper" le routeur en lui faisant croire qu'on utilise une version plus récente et ainsi éviter certains messages d'avertissement
+#timestamps = pour les logs (pas nécessaire mais bonne pratique)
+#boot-start/end-marker = marqueurs de début/fin de boot (pareil pas utile ici mais bonne pratique)
+#On rajoute la configuration de notre routeur
+        
+        
+        # Chemin vers le dossier config du routeur
+        base_dir = os.path.join(DOSSIER_PROJET, "project-files", "dynamips", uuid)
+        config_dir = os.path.join(base_dir, "configs")
+        
+        # Vérification si le dossier existe
+        if os.path.exists(config_dir):
+            
+            #On supprime la nvram pour forcer le chargement de la nouvelle config
+            nvram_file = os.path.join(base_dir, "nvram")
+            if os.path.exists(nvram_file):
+                try:
+                    os.remove(nvram_file)
+                    print(f"NVRAM supprimée pour {name}")
+                except:
+                    pass
+            
+            # On cherche le fichier startup-config
+            files = [f for f in os.listdir(config_dir) if "startup-config.cfg" in f] #liste des fichiers contenant "startup-config.cfg" (on ne devine pas le nom exact)
+            
+            target_file = ""
+            if files: #si on a deja un fichier existant on l'écrase sinon on crée un nouveau fichier 
+                target_file = os.path.join(config_dir, files[0])
+            else:
+                target_file = os.path.join(config_dir, "i1_startup-config.cfg")
+                
+            with open(target_file, 'w') as f: #écriture de la config finale dans le fichier startup-config
+                f.write(final_content)
+            print(f"OK : {name} (UUID: {uuid}) -> Injecté.")
 
-    print(f"Généré : {name}.cfg")#...
+        else:
+            print(f"Dossier introuvable pour {name} (UUID: {uuid})")
+
+
+
 
 
