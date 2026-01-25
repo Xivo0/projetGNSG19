@@ -3,8 +3,8 @@ import os
 import re #pour les expressions régulières
 
 # --- 1. CONFIGURATION ---
-DOSSIER_PROJET = r"C:\Users\Lucas\GNS3\projects\untitled4" #Chemin vers le dossier du projet GNS3 (à modifier selon config)
-FICHIER_GNS3 = os.path.join(DOSSIER_PROJET, "untitled4.gns3")
+DOSSIER_PROJET = r"C:\Users\Lucas\GNS3\projects\untitledv5" #Chemin vers le dossier du projet GNS3 (à modifier selon config)
+FICHIER_GNS3 = os.path.join(DOSSIER_PROJET, "untitledv5.gns3")
 FICHIER_INTENT = os.path.join(DOSSIER_PROJET, "intent.json")
 DOSSIER_SORTIE = os.path.join(DOSSIER_PROJET, "configs_finales")
 
@@ -56,19 +56,25 @@ def get_router_intent(router_name): #Retourne les données intent pour un routeu
     return None
 
 def get_link_relationship(r1, r2): #définit les relations entre deux routeurs
-    # print(intent.get('external_relationships', [])) #test
+    #print(intent.get('external_relationships', [])) #test
     for rel in intent.get('external_relationships', []): #rel sous la forme {'nodes': [r1, r2], 'relationship': 'customer/provider/peer'}
-        if r1 in rel['nodes'] and r2 in rel['nodes']:
-            return rel['relationship'] #customer, provider, peer, selon intent.json
+
+        #vérification stricte de l'ordre pour éviter l'inversion Client/Fournisseur
+
+        #Cas 1 : ["voisin", "moi"]. Le "relationship" est le rôle du voisin
+        if rel['nodes'] == [r2, r1]:
+            return rel['relationship'] 
+
+        # Cas 2: ["moi", "voisin"]. Le "relationship" est mon rôle. Le voisin est l'inverse.
+        if rel['nodes'] == [r1, r2]:
+            role = rel['relationship']
+            if role == 'customer': return 'provider' # Si je suis client, il est provider
+            if role == 'provider': return 'customer' # Si je suis provider, il est client
+            return role # Si peer, ça reste peer
+
     return "peer"
 #les liens non spécifiés sont considérés comme des peers par défaut
-
-def get_ospf_cost(r1, r2):
-    # Cherche si une métrique personnalisée existe pour cette paire de routeurs
-    for item in intent.get('ospf_custom_metrics', []):#parcourt la liste des règles personnalisées stockées dans le dictionnaire intent
-        if r1 in item['nodes'] and r2 in item['nodes']:# Pour chaque règle trouvée (item), on vérifie si elle concerne notre câble.
-            return item['cost']#renvoie la valeur du cout 
-    return None   
+    
 
 print("1. Configuration des IPs et Loopbacks...")
 for r in liste_routeurs:
@@ -156,7 +162,6 @@ for link in gns3_data['topology']['links']:# parcour chaque cable phyqique
     
     data_a = get_router_intent(name_a)#Associe extrémité à son As
     data_b = get_router_intent(name_b)
-    custom_cost = get_ospf_cost(name_a, name_b) #on récupére le cout avec la fonction 
 
     # Pour Routeur A
     if data_a and data_a['asn'] == data_b['asn']: # Seulement si lien interne (Même AS)
@@ -164,17 +169,15 @@ for link in gns3_data['topology']['links']:# parcour chaque cable phyqique
         if data_a['protocol'] == 'rip':
             configs[name_a] += f"interface {int_a}\n ipv6 rip {data_a['rip_process_name']} enable\n exit\n"#activation RIPng sur l'interface 
         elif data_a['protocol'] == 'ospf':
-            cost_cmd = f" ipv6 ospf cost {custom_cost}\n" if custom_cost else "" # si custom_cost à une valeur alors devient " ipv6 ospf cost 50\n" sinon ""
-            configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n{cost_cmd} exit\n" # les commandes que l'on rentre dans la config et on ajoute le cout 
-           
+            configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n exit\n"#pareil 
+
     # Pour Routeur B
     if data_b and data_b['asn'] == data_a['asn']: # Seulement si lien interne
         int_b = format_interface(node_b['adapter_number'], node_b['port_number'])
         if data_b['protocol'] == 'rip':
             configs[name_b] += f"interface {int_b}\n ipv6 rip {data_b['rip_process_name']} enable\n exit\n"
         elif data_b['protocol'] == 'ospf':
-            cost_cmd = f" ipv6 ospf cost {custom_cost}\n" if custom_cost else "" # pareil qu'avant 
-            configs[name_b] += f"interface {int_b}\n ipv6 ospf {data_b['ospf_process_id']} area 0\n{cost_cmd} exit\n"
+            configs[name_b] += f"interface {int_b}\n ipv6 ospf {data_b['ospf_process_id']} area 0\n exit\n"
 
 
 print("3. Configuration BGP Avancée (Policies)...")
@@ -278,8 +281,9 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     comm_cust = pols['customer_community']
     
     configs[r] += "! --- POLICIES ---\n"
-    configs[r] += "ip bgp community new-format\n"
+    configs[r] += "ip bgp-community new-format\n"
     configs[r] += f"ip community-list 1 permit {comm_cust}\n"#on definit la liste community et on l'ajoute plus tard
+    
     
     #DEFINITION D'UNE ACL POUR ANNONCER SON PREFIXE AUSSI
     configs[r] += f"ipv6 access-list ACL-MY-AS\n"
@@ -293,7 +297,8 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     
     # PROVIDER
     configs[r] += f"route-map RM-PROVIDER-IN permit 10\n"#route map d'entree
-    configs[r] += f" set local-preference {pols['local_pref_provider']}\n exit\n"#local pref faible
+    configs[r] += f" set local-preference {pols['local_pref_provider']}\n"#local pref faible
+    configs[r] += f" set community none\n exit\n"#on enlève les tags communities des providers pour pas propager nos clients chez eux (éviter transitivité des communities)
     configs[r] += f"route-map RM-PROVIDER-OUT permit 10\n"#route map de sortie
     configs[r] += f" match community 1\n exit\n"#en sortie on ne permet que les route allant vers nos client
     # AJOUT : Règle 20 pour laisser sortir notre propre réseau défini dans l'ACL
@@ -302,7 +307,8 @@ for r in liste_routeurs: #r = "R2" par exemple avec ses liens, vient du fichier 
     
     # PEER
     configs[r] += f"route-map RM-PEER-IN permit 10\n"#route map entree
-    configs[r] += f" set local-preference {pols['local_pref_peer']}\n exit\n"#local pref mid 
+    configs[r] += f" set local-preference {pols['local_pref_peer']}\n"#local pref mid 
+    configs[r] += f" set community none\n exit\n"
     configs[r] += f"route-map RM-PEER-OUT permit 10\n"#sortie
     configs[r] += f" match community 1\n exit\n"#pareil que les providers
     configs[r] += f"route-map RM-PEER-OUT permit 20\n"
@@ -392,7 +398,6 @@ end
 
         else:
             print(f"Dossier introuvable pour {name} (UUID: {uuid})")
-
 
 
 
