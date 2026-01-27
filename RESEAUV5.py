@@ -74,7 +74,12 @@ def get_link_relationship(r1, r2): #définit les relations entre deux routeurs
 
     return "peer"
 #les liens non spécifiés sont considérés comme des peers par défaut
-    
+def get_ospf_cost(r1, r2):
+    # Cherche si une métrique personnalisée existe pour cette paire de routeurs
+    for item in intent.get('ospf_custom_metrics', []):#parcourt la liste des règles personnalisées stockées dans le dictionnaire intent
+        if r1 in item['nodes'] and r2 in item['nodes']:# Pour chaque règle trouvée (item), on vérifie si elle concerne notre câble.
+            return item['cost']#renvoie la valeur du cout 
+    return None     
 
 print("1. Configuration des IPs et Loopbacks...")
 for r in liste_routeurs:
@@ -162,6 +167,7 @@ for link in gns3_data['topology']['links']:# Parcourt chaque câble physique
     
     data_a = get_router_intent(name_a)#Associe extrémité à son As
     data_b = get_router_intent(name_b)
+    custom_cost = get_ospf_cost(name_a, name_b) #on récupére le cout avec la fonction 
 
     # Pour Routeur A
     if data_a and data_a['asn'] == data_b['asn']: # Seulement si lien interne (Même AS)
@@ -169,7 +175,8 @@ for link in gns3_data['topology']['links']:# Parcourt chaque câble physique
         if data_a['protocol'] == 'rip':
             configs[name_a] += f"interface {int_a}\n ipv6 rip {data_a['rip_process_name']} enable\n exit\n"#Activation RIPng sur l'interface 
         elif data_a['protocol'] == 'ospf':
-            configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n exit\n"#Pareil 
+           cost_cmd = f" ipv6 ospf cost {custom_cost}\n" if custom_cost else "" # Si custom_cost a une valeur, on ajoute la commande "ipv6 ospf cost 50", sinon rien
+           configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n{cost_cmd} exit\n" # Les commandes ajoutées dans la configuration pour définir le coût
 
     # Pour Routeur B
     if data_b and data_b['asn'] == data_a['asn']: # Seulement si lien interne
@@ -177,7 +184,8 @@ for link in gns3_data['topology']['links']:# Parcourt chaque câble physique
         if data_b['protocol'] == 'rip':
             configs[name_b] += f"interface {int_b}\n ipv6 rip {data_b['rip_process_name']} enable\n exit\n"
         elif data_b['protocol'] == 'ospf':
-            configs[name_b] += f"interface {int_b}\n ipv6 ospf {data_b['ospf_process_id']} area 0\n exit\n"
+            cost_cmd = f" ipv6 ospf cost {custom_cost}\n" if custom_cost else "" # pareil qu'avant 
+            configs[name_b] += f"interface {int_b}\n ipv6 ospf {data_b['ospf_process_id']} area 0\n{cost_cmd} exit\n"
 
 
 print("3. Configuration BGP Avancée (Policies)...")
@@ -398,6 +406,7 @@ end
 
         else:
             print(f"Dossier introuvable pour {name} (UUID: {uuid})")
+
 
 
 
