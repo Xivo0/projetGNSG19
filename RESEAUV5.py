@@ -98,7 +98,7 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     name_a = nodes_map[node_a['node_id']]#traduit le name_id du routeur donner par le .gns3 en routeur R1, R2 ect...
     name_b = nodes_map[node_b['node_id']]
     
-    data_a = get_router_intent(name_a)#recupération de l'intent / data_a est tout le bloc JSON décrivant l’AS du routeur (prefix/protocol/routeur)
+    data_a = get_router_intent(name_a)#recupération de l'intent / data_a est tout le bloc intent décrivant l’AS du routeur (prefix/protocol/routeur)
     data_b = get_router_intent(name_b)
     
     if not data_a or not data_b: continue#filtrage des non routeurs (sur le .gns3 il peut y avoir des pc, des switchs...)
@@ -109,7 +109,7 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     # Subnet
     if data_a['asn'] == data_b['asn']:#Ce lien est-il interne à un AS ou entre deux AS différents ?
         mnemo = f"{min(rid_a, rid_b)}:{max(rid_a, rid_b)}" # traduit le lien entre 2 routeurs: R3 ↔ R7 min:3 max:7 -> mnemo = 37
-        subnet = f"{data_a['prefix']}:{mnemo}::"# generation du prefix 
+        subnet = f"{data_a['prefix']}:{mnemo}::"# Génération du préfixe 
     else:
         #correction duplicata d'ip
         # On utilise les IDs pour rendre le lien unique aussi en Inter-AS 
@@ -130,7 +130,7 @@ for link in gns3_data['topology']['links']:#lis automatiquement la topologie ré
     configs[name_b] += f"interface {int_b}\n no shutdown\n ipv6 address {subnet}{suff_b}/64\n no shutdown\n exit\n"
 
     #EEM
-    interfaces_actives[name_a].append(int_a) #ajout des interfaces dans le dico
+    interfaces_actives[name_a].append(int_a) #Ajout des interfaces dans le dictionnaire
     interfaces_actives[name_b].append(int_b)
     #print(interfaces_actives)
 
@@ -139,23 +139,23 @@ print("2. Configuration IGP (RIP/OSPF)...")
 # Configuration Globale des protocoles
 for r in liste_routeurs:
     data = get_router_intent(r)
-    if not data: continue#si le routeur n'est pas decrit dans le intent on passe 
+    if not data: continue#Si le routeur n'est pas decrit dans le intent on passe.
     
     if data['protocol'] == 'rip':
         proc = data['rip_process_name']#Récupère le nom du processus RIP
         configs[r] += f"ipv6 router rip {proc}\n redistribute connected\n exit\n"#Ajoute une configuration Cisco au buffer
-        configs[r] += f"interface Loopback0\n ipv6 rip {proc} enable\n exit\n"#interface doit être explicitement activée sur le loopback sinon pas annoncé 
+        configs[r] += f"interface Loopback0\n ipv6 rip {proc} enable\n exit\n"#L’interface doit être explicitement activée sur la loopback, sinon elle n’est pas annoncée.
         
     elif data['protocol'] == 'ospf':#cas ospf 
         proc = data['ospf_process_id']
         rid = get_id(r)#R3 → 3.3.3.3
         configs[r] += f"ipv6 router ospf {proc}\n router-id {rid}.{rid}.{rid}.{rid}\n exit\n"
-        configs[r] += f"interface Loopback0\n ipv6 ospf {proc} area 0\n exit\n"#active ospf sur le loopback 
+        configs[r] += f"interface Loopback0\n ipv6 ospf {proc} area 0\n exit\n"#Active ospf sur le loopback 
 
 # --- CORRECTION : ACTIVATION IGP SUR INTERFACES PHYSIQUES ---
 print("   -> Activation IGP sur les liens physiques...")
-for link in gns3_data['topology']['links']:# parcour chaque cable phyqique 
-    node_a = link['nodes'][0]#recup les 2 extremité du lien 
+for link in gns3_data['topology']['links']:# Parcourt chaque câble physique
+    node_a = link['nodes'][0]#Récupère les deux extrémités du lien
     node_b = link['nodes'][1]
     name_a = nodes_map[node_a['node_id']]#convertion ID GNS3
     name_b = nodes_map[node_b['node_id']]
@@ -167,9 +167,9 @@ for link in gns3_data['topology']['links']:# parcour chaque cable phyqique
     if data_a and data_a['asn'] == data_b['asn']: # Seulement si lien interne (Même AS)
         int_a = format_interface(node_a['adapter_number'], node_a['port_number'])#fait un Gigabyte1/0
         if data_a['protocol'] == 'rip':
-            configs[name_a] += f"interface {int_a}\n ipv6 rip {data_a['rip_process_name']} enable\n exit\n"#activation RIPng sur l'interface 
+            configs[name_a] += f"interface {int_a}\n ipv6 rip {data_a['rip_process_name']} enable\n exit\n"#Activation RIPng sur l'interface 
         elif data_a['protocol'] == 'ospf':
-            configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n exit\n"#pareil 
+            configs[name_a] += f"interface {int_a}\n ipv6 ospf {data_a['ospf_process_id']} area 0\n exit\n"#Pareil 
 
     # Pour Routeur B
     if data_b and data_b['asn'] == data_a['asn']: # Seulement si lien interne
@@ -398,6 +398,7 @@ end
 
         else:
             print(f"Dossier introuvable pour {name} (UUID: {uuid})")
+
 
 
 
