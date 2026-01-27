@@ -97,13 +97,13 @@ for r in liste_routeurs:
     configs[r] += f"ipv6 route {data['prefix']}::/32 Null0\n"
 
 # Liens Physiques (Lecture GNS3)
-for link in gns3_data['topology']['links']:#lis automatiquement la topologie réel du reseau (boucle sur chaque lien entre 2 routeurs pour donner un nom à ces routeurs)
+for link in gns3_data['topology']['links']:#lit automatiquement la topologie réel du reseau (boucle sur chaque lien entre 2 routeurs pour donner un nom à ces routeurs)
     node_a = link['nodes'][0]
     node_b = link['nodes'][1]
     name_a = nodes_map[node_a['node_id']]#traduit le name_id du routeur donner par le .gns3 en routeur R1, R2 ect...
     name_b = nodes_map[node_b['node_id']]
     
-    data_a = get_router_intent(name_a)#recupération de l'intent / data_a est tout le bloc intent décrivant l’AS du routeur (prefix/protocol/routeur)
+    data_a = get_router_intent(name_a)#récupération de l'intent / data_a est tout le bloc intent décrivant l’AS du routeur (prefix/protocol/routeur)
     data_b = get_router_intent(name_b)
     
     if not data_a or not data_b: continue#filtrage des non routeurs (sur le .gns3 il peut y avoir des pc, des switchs...)
@@ -406,6 +406,7 @@ end
 
         else:
             print(f"Dossier introuvable pour {name} (UUID: {uuid})")
+
 
 
 
