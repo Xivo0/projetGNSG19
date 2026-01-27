@@ -27,3 +27,5 @@ pour les local pref :
 
 
 Ce que fait le code avec les BGP Policies pour l'instant : créée des community-lists pours les customers avec un permit 10:100, met des local prefs dans les route-maps fait matcher les communities dans les route-maps des providers et peers pour ne leur annoncer que les clients.
+
+Utilisation de L'EEM : l'embedded event manager est un outil cisco qui permet d'appliquer des commandes liées au temps sur cisco entre autre. Ici, il est utilisé pour résoudre un problème de no shutdown automatique sur les routeurs lié à une lecture des configs par le routeur avant que celui ci soit chargé complètement dans GNS3.
